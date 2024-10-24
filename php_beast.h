@@ -72,6 +72,26 @@ ZEND_END_MODULE_GLOBALS(beast)
 #define BEAST_G(v) (beast_globals.v)
 #endif
 
+ZEND_BEGIN_ARG_INFO(arginfo_beast_encode_file, 0)
+	ZEND_ARG_INFO(0, input)
+	ZEND_ARG_INFO(0, output)
+	ZEND_ARG_INFO(0, expire)
+	ZEND_ARG_INFO(0, encrypt_type)
+ZEND_END_ARG_INFO()
+
+ZEND_BEGIN_ARG_INFO(arginfo_beast_avail_cache, 0)
+ZEND_END_ARG_INFO()
+
+ZEND_BEGIN_ARG_INFO(arginfo_beast_support_filesize, 0)
+ZEND_END_ARG_INFO()
+
+ZEND_BEGIN_ARG_INFO(arginfo_beast_file_expire, 0)
+	ZEND_ARG_INFO(0, file)
+ZEND_END_ARG_INFO()
+
+ZEND_BEGIN_ARG_INFO(arginfo_beast_clean_cache, 0)
+ZEND_END_ARG_INFO()
+
 #endif	/* PHP_BEAST_H */
 
 

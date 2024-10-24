@@ -4,7 +4,10 @@ Check for beast presence
 <?php if (!extension_loaded("beast")) print "skip"; ?>
 --FILE--
 <?php 
-echo "beast extension is available";
+file_put_contents('/tmp/test.php', '<?php echo "beast extension is available";');
+beast_encode_file('/tmp/test.php', '/tmp/test-encode.php');
+include '/tmp/test-encode.php';
+unlink('/tmp/test-encode.php');
 /*
 	you can add regression tests for your extension here
 

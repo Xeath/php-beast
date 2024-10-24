@@ -90,7 +90,7 @@ int beast_is_root = 0;
 int beast_pid = -1;
 
 /* True global resources - no need for thread safety here */
-static zend_op_array* (*old_compile_file)(zend_file_handle*, int TSRMLS_DC);
+static zend_op_array* (*old_compile_file)(zend_file_handle*, int);
 
 static int le_beast;
 static int max_cache_size = DEFAULT_CACHE_SIZE;
@@ -107,11 +107,11 @@ static int beast_debug_mode = 0;
  * Every user visible function must have an entry in beast_functions[].
  */
 zend_function_entry beast_functions[] = {
-    PHP_FE(beast_encode_file,      NULL)
-    PHP_FE(beast_avail_cache,      NULL)
-    PHP_FE(beast_support_filesize, NULL)
-    PHP_FE(beast_file_expire,      NULL)
-    PHP_FE(beast_clean_cache,      NULL)
+    PHP_FE(beast_encode_file,      arginfo_beast_encode_file)
+    PHP_FE(beast_avail_cache,      arginfo_beast_avail_cache)
+    PHP_FE(beast_support_filesize, arginfo_beast_support_filesize)
+    PHP_FE(beast_file_expire,      arginfo_beast_file_expire)
+    PHP_FE(beast_clean_cache,      arginfo_beast_clean_cache)
     {NULL, NULL, NULL}    /* Must be the last line in beast_functions[] */
 };
 /* }}} */
@@ -175,34 +175,41 @@ static int big_endian()
 }
 
 
-int filter_code_comments(char *filename, zval *retval TSRMLS_DC)
+int filter_code_comments(char *filename, zval *retval)
 {
     zend_lex_state original_lex_state;
     zend_file_handle file_handle = {0};
 
 #if PHP_API_VERSION > 20090626
 
-    php_output_start_default(TSRMLS_C);
+    php_output_start_default();
 
     file_handle.type = ZEND_HANDLE_FILENAME;
-    file_handle.filename = filename;
-    file_handle.free_filename = 0;
+    #if PHP_API_VERSION > 20200930
+        file_handle.filename =
+            zend_string_init((char *)filename, strlen(filename), 0);
+    #else
+        file_handle.filename = filename;
+    #endif
+    #if PHP_API_VERSION < 20210902
+        file_handle.free_filename = 0;
+    #endif
     file_handle.opened_path = NULL;
 
-    zend_save_lexical_state(&original_lex_state TSRMLS_CC);
-    if (open_file_for_scanning(&file_handle TSRMLS_CC) == FAILURE) {
-        zend_restore_lexical_state(&original_lex_state TSRMLS_CC);
-        php_output_end(TSRMLS_C);
+    zend_save_lexical_state(&original_lex_state);
+    if (open_file_for_scanning(&file_handle) == FAILURE) {
+        zend_restore_lexical_state(&original_lex_state);
+        php_output_end();
         return -1;
     }
 
-    zend_strip(TSRMLS_C);
+    zend_strip();
 
-    zend_destroy_file_handle(&file_handle TSRMLS_CC);
-    zend_restore_lexical_state(&original_lex_state TSRMLS_CC);
+    zend_destroy_file_handle(&file_handle);
+    zend_restore_lexical_state(&original_lex_state);
 
-    php_output_get_contents(retval TSRMLS_CC);
-    php_output_discard(TSRMLS_C);
+    php_output_get_contents(retval);
+    php_output_discard();
 
 #else
 
@@ -211,21 +218,21 @@ int filter_code_comments(char *filename, zval *retval TSRMLS_DC)
     file_handle.free_filename = 0;
     file_handle.opened_path = NULL;
 
-    zend_save_lexical_state(&original_lex_state TSRMLS_CC);
-    if (open_file_for_scanning(&file_handle TSRMLS_CC) == FAILURE) {
-        zend_restore_lexical_state(&original_lex_state TSRMLS_CC);
+    zend_save_lexical_state(&original_lex_state);
+    if (open_file_for_scanning(&file_handle) == FAILURE) {
+        zend_restore_lexical_state(&original_lex_state);
         return -1;
     }
 
-    php_start_ob_buffer(NULL, 0, 1 TSRMLS_CC);
+    php_start_ob_buffer(NULL, 0, 1);
 
-    zend_strip(TSRMLS_C);
+    zend_strip();
 
-    zend_destroy_file_handle(&file_handle TSRMLS_CC);
-    zend_restore_lexical_state(&original_lex_state TSRMLS_CC);
+    zend_destroy_file_handle(&file_handle);
+    zend_restore_lexical_state(&original_lex_state);
 
-    php_ob_get_buffer(retval TSRMLS_CC);
-    php_end_ob_buffer(0, 0 TSRMLS_CC);
+    php_ob_get_buffer(retval);
+    php_end_ob_buffer(0, 0);
 
 #endif
 
@@ -253,7 +260,7 @@ struct beast_ops *beast_get_encrypt_algo(int type)
 
 int encrypt_file(const char *inputfile,
     const char *outputfile, int expire,
-    int encrypt_type TSRMLS_DC)
+    int encrypt_type)
 {
     php_stream *output_stream = NULL;
     zval codes;
@@ -263,8 +270,8 @@ int encrypt_file(const char *inputfile,
     struct beast_ops *encrypt_ops = beast_get_encrypt_algo(encrypt_type);
 
     /* Get php codes from script file */
-    if (filter_code_comments((char *)inputfile, &codes TSRMLS_CC) == -1) {
-        php_error_docref(NULL TSRMLS_CC, E_ERROR,
+    if (filter_code_comments((char *)inputfile, &codes) == -1) {
+        php_error_docref(NULL, E_ERROR,
                          "Unable get codes from php file `%s'", inputfile);
         return -1;
     }
@@ -286,6 +293,9 @@ int encrypt_file(const char *inputfile,
 
     /* Open output file */
 #if ZEND_MODULE_API_NO >= 20151012
+    #if PHP_API_VERSION > 20200930
+        #define IGNORE_URL_WIN 0
+    #endif
     output_stream = php_stream_open_wrapper((char *)outputfile, "w+",
                               IGNORE_URL_WIN|REPORT_ERRORS, NULL);
 #else
@@ -294,7 +304,7 @@ int encrypt_file(const char *inputfile,
 #endif
 
     if (!output_stream) {
-        php_error_docref(NULL TSRMLS_CC, E_ERROR,
+        php_error_docref(NULL, E_ERROR,
                                         "Unable to open file `%s'", outputfile);
         goto failed;
     }
@@ -318,7 +328,7 @@ int encrypt_file(const char *inputfile,
     php_stream_write(output_stream, (const char *)&dumptype, INT_SIZE);
 
     if (encrypt_ops->encrypt(inbuf, inlen, &outbuf, &outlen) == -1) {
-        php_error_docref(NULL TSRMLS_CC, E_ERROR,
+        php_error_docref(NULL, E_ERROR,
                          "Unable to encrypt file `%s'", outputfile);
         goto failed;
     }
@@ -350,7 +360,7 @@ failed:
 
 int decrypt_file(const char *filename, int stream,
         char **retbuf, int *retlen, int *free_buffer,
-        struct beast_ops **ret_encrypt TSRMLS_DC)
+        struct beast_ops **ret_encrypt)
 {
     struct stat stat_ssb;
     cache_key_t findkey;
@@ -581,7 +591,7 @@ int beast_super_mkdir(char *path)
  * CGI compile file
  */
 zend_op_array *
-cgi_compile_file(zend_file_handle *h, int type TSRMLS_DC)
+cgi_compile_file(zend_file_handle *h, int type)
 {
 #if ZEND_MODULE_API_NO >= 20151012
     zend_string *opened_path;
@@ -596,10 +606,16 @@ cgi_compile_file(zend_file_handle *h, int type TSRMLS_DC)
     struct beast_ops *ops = NULL;
     int destroy_file_handler = 0;
 
-#if 0
-    fp = zend_fopen(h->filename, &opened_path TSRMLS_CC);
+#if PHP_API_VERSION > 20200930
+    const char *filename = ZSTR_VAL(h->filename);
 #else
-    fp = fopen(h->filename, "rb");
+    const char *filename = h->filename;
+#endif
+
+#if 0
+    fp = zend_fopen(h->filename, &opened_path);
+#else
+    fp = fopen(filename, "rb");
 #endif
     if (fp != NULL) {
         fd = fileno(fp);
@@ -607,10 +623,10 @@ cgi_compile_file(zend_file_handle *h, int type TSRMLS_DC)
         goto final;
     }
 
-    retval = decrypt_file(h->filename, fd, &buf, &size,
-                          &free_buffer, &ops TSRMLS_CC);
+    retval = decrypt_file(filename, fd, &buf, &size,
+                          &free_buffer, &ops);
     if (retval == -2) {
-        php_error_docref(NULL TSRMLS_CC, E_ERROR,
+        php_error_docref(NULL, E_ERROR,
             "This program was expired, please contact administrator");
         return NULL;
     }
@@ -619,7 +635,7 @@ cgi_compile_file(zend_file_handle *h, int type TSRMLS_DC)
 #if BEAST_EXECUTE_NORMAL_SCRIPT
         goto final;
 #else
-        php_error_docref(NULL TSRMLS_CC, E_ERROR,
+        php_error_docref(NULL, E_ERROR,
                          "Not allow execute normal PHP script");
         return NULL;
 #endif
@@ -690,7 +706,7 @@ final:
         default_file_handler->destroy(default_file_handler);
     }
 
-    return old_compile_file(h, type TSRMLS_CC);
+    return old_compile_file(h, type);
 }
 
 
@@ -1298,13 +1314,13 @@ PHP_MINIT_FUNCTION(beast)
     }
 
     if (validate_networkcard() == -1) {
-        php_error_docref(NULL TSRMLS_CC, E_ERROR,
+        php_error_docref(NULL, E_ERROR,
                          "Not allow run at this computer");
         return FAILURE;
     }
 
     if ((encrypt_file_header_length + INT_SIZE * 2) > HEADER_MAX_SIZE) {
-        php_error_docref(NULL TSRMLS_CC, E_ERROR,
+        php_error_docref(NULL, E_ERROR,
             "Header size overflow max size `%d'", HEADER_MAX_SIZE);
         return FAILURE;
     }
@@ -1329,13 +1345,13 @@ PHP_MINIT_FUNCTION(beast)
     }
 
     if (beast_cache_init(max_cache_size) == -1) {
-        php_error_docref(NULL TSRMLS_CC,
+        php_error_docref(NULL,
                          E_ERROR, "Unable initialize cache for beast");
         return FAILURE;
     }
 
     if (beast_log_init(beast_log_file, log_level) == -1) {
-        php_error_docref(NULL TSRMLS_CC,
+        php_error_docref(NULL,
                          E_ERROR, "Unable open log file for beast");
         return FAILURE;
     }
@@ -1346,13 +1362,13 @@ PHP_MINIT_FUNCTION(beast)
 
         pwd = getpwnam((const char *)beast_log_user);
         if (!pwd) {
-            php_error_docref(NULL TSRMLS_CC,
+            php_error_docref(NULL,
                              E_ERROR, "Unable get user passwd information");
             return FAILURE;
         }
 
         if (beast_log_chown(pwd->pw_uid, pwd->pw_gid) != 0) {
-            php_error_docref(NULL TSRMLS_CC,
+            php_error_docref(NULL,
                              E_ERROR, "Unable change log file owner");
             return FAILURE;
         }
@@ -1458,8 +1474,8 @@ PHP_FUNCTION(beast_file_expire)
 
     zend_string *input_file;
 
-    if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "S",
-                              &input_file TSRMLS_CC) == FAILURE)
+    if (zend_parse_parameters(ZEND_NUM_ARGS(), "S",
+                              &input_file) == FAILURE)
     {
         RETURN_FALSE;
     }
@@ -1469,8 +1485,8 @@ PHP_FUNCTION(beast_file_expire)
 
 #else
 
-    if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "s",
-                              &file, &file_len TSRMLS_CC) == FAILURE)
+    if (zend_parse_parameters(ZEND_NUM_ARGS(), "s",
+                              &file, &file_len) == FAILURE)
     {
         RETURN_FALSE;
     }
@@ -1499,7 +1515,7 @@ PHP_FUNCTION(beast_file_expire)
     }
 
     if (expire > 0) {
-        string = (char *)php_format_date(format, strlen(format), expire, 1 TSRMLS_CC);
+        string = (char *)php_format_date(format, strlen(format), expire, 1);
         BEAST_RETURN_STRING(string, 0);
     } else {
         BEAST_RETURN_STRING("+Infinity", 1);
@@ -1526,7 +1542,7 @@ PHP_FUNCTION(beast_encode_file)
 
     zend_string *in, *out;
 
-    if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "SS|ll",
+    if (zend_parse_parameters(ZEND_NUM_ARGS(), "SS|ll",
         &in, &out, &expire, &encrypt_type) == FAILURE)
     {
         RETURN_FALSE;
@@ -1539,9 +1555,9 @@ PHP_FUNCTION(beast_encode_file)
 
 #else
 
-    if (zend_parse_parameters(ZEND_NUM_ARGS() TSRMLS_CC, "ss|ll",
+    if (zend_parse_parameters(ZEND_NUM_ARGS(), "ss|ll",
             &input, &input_len, &output, &output_len,
-            &expire, &encrypt_type TSRMLS_CC) == FAILURE)
+            &expire, &encrypt_type) == FAILURE)
     {
         RETURN_FALSE;
     }
@@ -1555,7 +1571,7 @@ PHP_FUNCTION(beast_encode_file)
     }
 
     ret = encrypt_file(input, output,
-                      (int)expire, (int)encrypt_type TSRMLS_CC);
+                      (int)expire, (int)encrypt_type);
     if (ret == -1) {
         RETURN_FALSE;
     }

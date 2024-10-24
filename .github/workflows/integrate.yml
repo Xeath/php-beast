@@ -17,6 +17,21 @@ jobs:
           - PHP: "7.4"
             OS: "ubuntu-latest"
             ZTS: true
+          - PHP: "8.0"
+            OS: "ubuntu-latest"
+            ZTS: true
+          - PHP: "8.1"
+            OS: "ubuntu-latest"
+            ZTS: true
+          - PHP: "8.2"
+            OS: "ubuntu-latest"
+            ZTS: true
+          - PHP: "8.3"
+            OS: "ubuntu-latest"
+            ZTS: true
+          - PHP: "8.4"
+            OS: "ubuntu-latest"
+            ZTS: true
     env:
       GITHUB: "yes"
       enable_debug: "yes"

@@ -61,7 +61,7 @@ beast.log_level支持参数：
 
 通过测试环境:
 <pre><code>
- Nginx + Fastcgi + (PHP-5.2.x ~ PHP-7.1.x)
+ Nginx + Fastcgi + (PHP-5.2.x ~ PHP-8.4.x)
 </code></pre>
 
 ------------------------------
